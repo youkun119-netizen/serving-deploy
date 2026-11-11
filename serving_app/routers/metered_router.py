@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from ..core.config import settings
+from ..core.metrics import OUTPUT_TOKENS
 from ..dependencies.security import check_rate_limit, get_db, require_service_key
 from ..repositories.key_store import record_usage, usage_summary
 from ..schemas.chat import ChatRequest, ChatResponse
@@ -43,7 +44,7 @@ async def metered_chat(
     client: dict = Depends(check_rate_limit),
     connection=Depends(get_db),  # lifespan 이 연 DB 연결
 ):
-    """상담 질문 하나의 답을 돌려주고, 그 요청의 토큰 사용량을 키별로 기록한다."""
+    """상담 답을 돌려주고, 키별 사용량과 창구별 출력 토큰 수를 기록합니다."""
     # 1) desk 에 맞는 시스템 메시지로 vLLM 에 묻는다(desk 가 labor, lease 가 아니면 422)
     completion = await ask_vllm(SYSTEM_PROMPTS[desk], request.question, request.think, max_tokens_think=THINK_LIMITS[desk])
 
@@ -53,6 +54,9 @@ async def metered_chat(
         connection, client["key_id"], f"/v1/{desk}/chat",
         usage.prompt_tokens, usage.prompt_tokens_details.cached_tokens, usage.completion_tokens,
     )
+
+    # labels(desk=desk) 는 이 창구의 카운터를 고릅니다. inc(...) 는 이 답의 출력 토큰 수를 더합니다.
+    OUTPUT_TOKENS.labels(desk=desk).inc(completion.usage.completion_tokens)
     return to_chat_response(completion)
 
 
@@ -64,6 +68,8 @@ async def relay_and_record(stream, connection, key_id, path):
         if line.startswith('data: {"type": "usage"'):
             usage = json.loads(line[len("data: "):])
             await record_usage(connection, key_id, path, usage["prompt_tokens"], usage["cached_tokens"], usage["completion_tokens"])
+            # labels(...) 는 URL의 창구별 카운터를 고르고, inc(...) 는 마지막 usage 이벤트의 출력 토큰 수를 더합니다.
+            OUTPUT_TOKENS.labels(desk=path.split("/")[2]).inc(usage["completion_tokens"])
         yield line
 
 

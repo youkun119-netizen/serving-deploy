@@ -12,11 +12,6 @@ async def healthz():
     return {"status": "ok"}
 
 
-@system_router.get("/hello")
-async def hello_encore():
-    return {"인삿말": "안녕하세요~!"}
-
-
 @system_router.get("/v1/models")
 async def list_models():
     """vLLM 서버가 서빙 중인 모델 이름 목록을 돌려준다."""
