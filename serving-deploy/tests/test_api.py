@@ -9,6 +9,7 @@ import httpx
 
 # 확인할 서버 주소(CI 의 image 작업은 http://localhost:8080 을 준다)
 SERVING_URL = os.environ.get("SERVING_URL", "http://localhost:8080")
+ADMIN_API_KEY = os.environ["ADMIN_API_KEY"]                       # 관측 단원: /metrics 를 여는 관리자 키(CI 의 image 작업이 준다)
 
 QUESTION = {"question": "주휴수당은 어떤 조건에서 받을 수 있나요?"}
 
@@ -43,3 +44,19 @@ def test_chat_reaches_backend(service_key):
     )
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "backend_unavailable"
+
+
+# 관측 단원 교안 01: 메트릭 주소 테스트 두 개
+def test_metrics_needs_admin_key():
+    # 관리자 키 없이 /metrics 를 부르면 403
+    response = httpx.get(f"{SERVING_URL}/metrics", timeout=10)
+    assert response.status_code == 403
+
+
+def test_chat_is_counted():
+    # 키 없는 상담 요청(401)도 미들웨어가 세므로, /metrics 에 그 상태 코드로 센 줄과 15초 경계 칸이 있어야 한다
+    httpx.post(f"{SERVING_URL}/v1/labor/chat", json=QUESTION, timeout=10)
+    response = httpx.get(f"{SERVING_URL}/metrics", headers={"X-Admin-Key": ADMIN_API_KEY}, timeout=10)
+    assert response.status_code == 200
+    assert 'serving_requests_total{path="/v1/labor/chat",status="401"}' in response.text
+    assert 'serving_request_seconds_bucket{le="15.0",path="/v1/labor/chat"}' in response.text

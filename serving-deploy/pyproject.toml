@@ -11,6 +11,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "pydantic-settings>=2.14.2",  # day77 서빙 코드가 설정(config.py 의 Settings)을 읽는 라이브러리
     "aiosqlite>=0.22.1",          # day77 키 저장소(repositories/key_store.py)가 SQLite 를 await 로 읽고 쓰는 라이브러리
+    "prometheus-client>=0.26.0",   # /metrics 로 내보낼 숫자 세기(관측 단원 교안 01)
 ]
 
 # 배포 전 테스트에만 쓰는 라이브러리. 이미지에는 넣지 않는다(uv sync --no-dev)

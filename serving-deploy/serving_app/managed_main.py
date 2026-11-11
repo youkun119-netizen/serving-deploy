@@ -1,6 +1,6 @@
-"""교안 03 서빙 API(DB 키 관리, 사용량 기록). 실행: uv run uvicorn serving_app.managed_main:app --host 0.0.0.0 --port 8080 --reload
+"""교안 03 서빙 API(DB 키 관리, 사용량 기록)에 관측 단원 교안 01 의 메트릭을 더한 앱. 이미지의 CMD 가 이 앱을 띄운다.
 
-교안 02 와 다른 점: 키를 SQLite 에 해시로 저장하고, 관리자 주소로 발급과 폐기를 하며, 요청마다 토큰 사용량을 기록한다.
+FastAPI 서빙 API 단원 교안 03 과 다른 점: 상담 요청 수, 걸린 시간, 출력 토큰 수를 세는 미들웨어와 /metrics 주소를 붙인다.
 """
 from contextlib import asynccontextmanager
 
@@ -8,6 +8,7 @@ import aiosqlite
 from fastapi import Depends, FastAPI
 
 from .core.errors import register_error_handlers
+from .core.metrics import metrics_router, record_chat_request
 from .dependencies.security import require_admin
 from .repositories.key_store import SERVICE_DB_PATH, init_db
 from .routers.admin_router import admin_router
@@ -45,3 +46,7 @@ app.include_router(system_router)
 app.include_router(admin_router, dependencies=[Depends(require_admin)])
 # 상담은 키별 사용량을 기록하므로, 엔드포인트의 client=Depends(...) 로 키 정보도 받는다.
 app.include_router(metered_router)
+
+# 관측 단원: 모든 HTTP 요청이 record_chat_request 를 거치게 하고(미들웨어), /metrics 주소를 붙인다
+app.middleware("http")(record_chat_request)
+app.include_router(metrics_router)
